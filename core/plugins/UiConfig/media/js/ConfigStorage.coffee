@@ -32,6 +32,13 @@ class ConfigStorage extends Class
 				return value.split("\n")
 		if type == "boolean" and not value
 			return false
+		else if type == "number"
+			if typeof(value) == "number"
+				return value.toString()
+			else if not value
+				return "0"
+			else
+				return value
 		else
 			return value
 
@@ -68,7 +75,7 @@ class ConfigStorage extends Class
 			title: "File server port"
 			type: "text"
 			valid_pattern: /[0-9]*/
-			description: "Other peers will use this port to reach your served sites. (default: 15441)"
+			description: "Other peers will use this port to reach your served sites. (default: randomize)"
 
 		section.items.push
 			key: "ip_external"
@@ -111,7 +118,7 @@ class ConfigStorage extends Class
 			key: "trackers_file"
 			type: "textarea"
 			description: "Load additional list of torrent trackers dynamically, from a file"
-			placeholder: "Eg.: data/trackers.json"
+			placeholder: "Eg.: {data_dir}/trackers.json"
 			value_pos: "fullwidth"
 
 		section.items.push
@@ -147,6 +154,62 @@ class ConfigStorage extends Class
 				{title: "Everything", value: "DEBUG"}
 				{title: "Only important messages", value: "INFO"}
 				{title: "Only errors", value: "ERROR"}
+			]
+
+		section.items.push
+			key: "threads_fs_read"
+			title: "Threads for async file system reads"
+			type: "select"
+			options: [
+				{title: "Sync read", value: 0}
+				{title: "1 thread", value: 1}
+				{title: "2 threads", value: 2}
+				{title: "3 threads", value: 3}
+				{title: "4 threads", value: 4}
+				{title: "5 threads", value: 5}
+				{title: "10 threads", value: 10}
+			]
+
+		section.items.push
+			key: "threads_fs_write"
+			title: "Threads for async file system writes"
+			type: "select"
+			options: [
+				{title: "Sync write", value: 0}
+				{title: "1 thread", value: 1}
+				{title: "2 threads", value: 2}
+				{title: "3 threads", value: 3}
+				{title: "4 threads", value: 4}
+				{title: "5 threads", value: 5}
+				{title: "10 threads", value: 10}
+			]
+
+		section.items.push
+			key: "threads_crypt"
+			title: "Threads for cryptographic functions"
+			type: "select"
+			options: [
+				{title: "Sync execution", value: 0}
+				{title: "1 thread", value: 1}
+				{title: "2 threads", value: 2}
+				{title: "3 threads", value: 3}
+				{title: "4 threads", value: 4}
+				{title: "5 threads", value: 5}
+				{title: "10 threads", value: 10}
+			]
+
+		section.items.push
+			key: "threads_db"
+			title: "Threads for database operations"
+			type: "select"
+			options: [
+				{title: "Sync execution", value: 0}
+				{title: "1 thread", value: 1}
+				{title: "2 threads", value: 2}
+				{title: "3 threads", value: 3}
+				{title: "4 threads", value: 4}
+				{title: "5 threads", value: 5}
+				{title: "10 threads", value: 10}
 			]
 
 	createSection: (title) =>

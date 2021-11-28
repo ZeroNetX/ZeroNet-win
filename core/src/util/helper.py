@@ -49,7 +49,7 @@ def jsonDumps(data):
         else:
             return match.group(0)
 
-    content = re.sub(r"\{(\n[^,\[\{]{10,100}?)\}[, ]{0,2}\n", compact_dict, content, flags=re.DOTALL)
+    content = re.sub(r"\{(\n[^,\[\{]{10,100000}?)\}[, ]{0,2}\n", compact_dict, content, flags=re.DOTALL)
 
     def compact_list(match):
         if "\n" in match.group(0):
@@ -58,7 +58,7 @@ def jsonDumps(data):
         else:
             return match.group(0)
 
-    content = re.sub(r"\[([^\[\{]{2,300}?)\][, ]{0,2}\n", compact_list, content, flags=re.DOTALL)
+    content = re.sub(r"\[([^\[\{]{2,100000}?)\][, ]{0,2}\n", compact_list, content, flags=re.DOTALL)
 
     # Remove end of line whitespace
     content = re.sub(r"(?m)[ ]+$", "", content)
@@ -119,9 +119,10 @@ def packPeers(peers):
     for peer in peers:
         try:
             ip_type = getIpType(peer.ip)
-            packed_peers[ip_type].append(peer.packMyAddress())
+            if ip_type in packed_peers:
+                packed_peers[ip_type].append(peer.packMyAddress())
         except Exception:
-            logging.error("Error packing peer address: %s" % peer)
+            logging.debug("Error packing peer address: %s" % peer)
     return packed_peers
 
 
@@ -234,7 +235,7 @@ def timerCaller(secs, func, *args, **kwargs):
 
 
 def timer(secs, func, *args, **kwargs):
-    gevent.spawn_later(secs, timerCaller, secs, func, *args, **kwargs)
+    return gevent.spawn_later(secs, timerCaller, secs, func, *args, **kwargs)
 
 
 def create_connection(address, timeout=None, source_address=None):
@@ -295,8 +296,10 @@ def getIpType(ip):
         return "onion"
     elif ":" in ip:
         return "ipv6"
-    else:
+    elif re.match(r"[0-9\.]+$", ip):
         return "ipv4"
+    else:
+        return "unknown"
 
 
 def createSocket(ip, sock_type=socket.SOCK_STREAM):
@@ -335,13 +338,19 @@ def cmp(a, b):
     return (a > b) - (a < b)
 
 
-def encodeResponse(func):
+def encodeResponse(func):  # Encode returned data from utf8 to bytes
     def wrapper(*args, **kwargs):
         back = func(*args, **kwargs)
         if "__next__" in dir(back):
             for part in back:
-                yield part.encode()
+                if type(part) == bytes:
+                    yield part
+                else:
+                    yield part.encode()
         else:
-            yield back.encode()
+            if type(back) == bytes:
+                yield back
+            else:
+                yield back.encode()
 
     return wrapper

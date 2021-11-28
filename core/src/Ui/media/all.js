@@ -34,7 +34,6 @@
 
 }).call(this);
 
-
 /* ---- lib/Translate.coffee ---- */
 
 
@@ -44,7 +43,6 @@
   };
 
 }).call(this);
-
 
 /* ---- lib/ZeroWebsocket.coffee ---- */
 
@@ -201,7 +199,6 @@
 
 }).call(this);
 
-
 /* ---- lib/jquery.cssanim.js ---- */
 
 
@@ -306,7 +303,6 @@ if (window.getComputedStyle(document.body).transform) {
   };
 
 }).call(this);
-
 
 /* ---- lib/jquery.easing.js ---- */
 
@@ -535,7 +531,6 @@ $.extend( $.easing,
 
 }).call(this);
 
-
 /* ---- Infopanel.coffee ---- */
 
 
@@ -553,6 +548,7 @@ $.extend( $.easing,
       this.close = bind(this.close, this);
       this.hide = bind(this.hide, this);
       this.updateEvents = bind(this.updateEvents, this);
+      this.unfold = bind(this.unfold, this);
       this.show = bind(this.show, this);
       this.visible = false;
     }
@@ -561,7 +557,7 @@ $.extend( $.easing,
       if (closed == null) {
         closed = false;
       }
-      this.elem.addClass("visible");
+      this.elem.parent().addClass("visible");
       if (closed) {
         return this.close();
       } else {
@@ -569,9 +565,16 @@ $.extend( $.easing,
       }
     };
 
+    Infopanel.prototype.unfold = function() {
+      this.elem.toggleClass("unfolded");
+      return false;
+    };
+
     Infopanel.prototype.updateEvents = function() {
       this.elem.off("click");
       this.elem.find(".close").off("click");
+      this.elem.find(".line").off("click");
+      this.elem.find(".line").on("click", this.unfold);
       if (this.elem.hasClass("closed")) {
         return this.elem.on("click", (function(_this) {
           return function() {
@@ -590,7 +593,7 @@ $.extend( $.easing,
     };
 
     Infopanel.prototype.hide = function() {
-      return this.elem.removeClass("visible");
+      return this.elem.parent().removeClass("visible");
     };
 
     Infopanel.prototype.close = function() {
@@ -626,12 +629,12 @@ $.extend( $.easing,
 
 }).call(this);
 
-
 /* ---- Loading.coffee ---- */
 
 
 (function() {
-  var Loading;
+  var Loading,
+    slice = [].slice;
 
   Loading = (function() {
     function Loading(wrapper) {
@@ -640,13 +643,14 @@ $.extend( $.easing,
         this.showScreen();
       }
       this.timer_hide = null;
+      this.timer_set = null;
     }
 
     Loading.prototype.setProgress = function(percent) {
       if (this.timer_hide) {
         clearInterval(this.timer_hide);
       }
-      return RateLimit(200, function() {
+      return this.timer_set = RateLimit(500, function() {
         return $(".progressbar").css({
           "transform": "scaleX(" + (parseInt(percent * 100) / 100) + ")"
         }).css("opacity", "1").css("display", "block");
@@ -654,7 +658,10 @@ $.extend( $.easing,
     };
 
     Loading.prototype.hideProgress = function() {
-      console.log("hideProgress");
+      this.log("hideProgress");
+      if (this.timer_set) {
+        clearInterval(this.timer_set);
+      }
       return this.timer_hide = setTimeout(((function(_this) {
         return function() {
           return $(".progressbar").css({
@@ -672,6 +679,7 @@ $.extend( $.easing,
 
     Loading.prototype.showTooLarge = function(site_info) {
       var button, line;
+      this.log("Displaying large site confirmation");
       if ($(".console .button-setlimit").length === 0) {
         line = this.printLine("Site size: <b>" + (parseInt(site_info.settings.size / 1024 / 1024)) + "MB</b> is larger than default allowed " + (parseInt(site_info.size_limit)) + "MB", "warning");
         button = $("<a href='#Set+limit' class='button button-setlimit'>" + ("Open site and set size limit to " + site_info.next_size_limit + "MB") + "</a>");
@@ -717,7 +725,7 @@ $.extend( $.easing,
     };
 
     Loading.prototype.hideScreen = function() {
-      console.log("hideScreen");
+      this.log("hideScreen");
       if (!$(".loadingscreen").hasClass("done")) {
         if (this.screen_visible) {
           $(".loadingscreen").addClass("done").removeLater(2000);
@@ -765,6 +773,12 @@ $.extend( $.easing,
       return line;
     };
 
+    Loading.prototype.log = function() {
+      var args;
+      args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+      return console.log.apply(console, ["[Loading]"].concat(slice.call(args)));
+    };
+
     return Loading;
 
   })();
@@ -772,7 +786,6 @@ $.extend( $.easing,
   window.Loading = Loading;
 
 }).call(this);
-
 
 /* ---- Notifications.coffee ---- */
 
@@ -842,7 +855,7 @@ $.extend( $.easing,
           };
         })(this)), timeout);
       }
-      width = Math.min(elem.outerWidth(), 580);
+      width = Math.min(elem.outerWidth() + 50, 580);
       if (!timeout) {
         width += 20;
       }
@@ -860,7 +873,7 @@ $.extend( $.easing,
         "width": width
       }, 700, "easeInOutCubic");
       $(".body", elem).css({
-        "width": width - 80
+        "width": width - 50
       });
       $(".body", elem).cssLater("box-shadow", "0px 0px 5px rgba(0,0,0,0.1)", 1000);
       $(".close, .button", elem).on("click", (function(_this) {
@@ -907,7 +920,6 @@ $.extend( $.easing,
   window.Notifications = Notifications;
 
 }).call(this);
-
 
 /* ---- Wrapper.coffee ---- */
 
@@ -971,6 +983,7 @@ $.extend( $.easing,
       this.opener_tested = false;
       this.announcer_line = null;
       this.web_notifications = {};
+      this.is_title_changed = false;
       this.allowed_event_constructors = [window.MouseEvent, window.KeyboardEvent, window.PointerEvent];
       window.onload = this.onPageLoad;
       window.onhashchange = (function(_this) {
@@ -1147,7 +1160,9 @@ $.extend( $.easing,
       } else if (cmd === "wrapperSetViewport") {
         return this.actionSetViewport(message);
       } else if (cmd === "wrapperSetTitle") {
-        return $("head title").text(message.params);
+        this.log("wrapperSetTitle", message.params);
+        $("head title").text(message.params);
+        return this.is_title_changed = true;
       } else if (cmd === "wrapperReload") {
         return this.actionReload(message);
       } else if (cmd === "wrapperGetLocalStorage") {
@@ -1553,14 +1568,17 @@ $.extend( $.easing,
     };
 
     Wrapper.prototype.reload = function(url_post) {
+      var current_url;
       if (url_post == null) {
         url_post = "";
       }
+      this.log("Reload");
+      current_url = window.location.toString().replace(/#.*/g, "");
       if (url_post) {
-        if (window.location.toString().indexOf("?") > 0) {
-          return window.location += "&" + url_post;
+        if (current_url.indexOf("?") > 0) {
+          return window.location = current_url + "&" + url_post;
         } else {
-          return window.location += "?" + url_post;
+          return window.location = current_url + "?" + url_post;
         }
       } else {
         return window.location.reload();
@@ -1670,6 +1688,7 @@ $.extend( $.easing,
 
     Wrapper.prototype.onPageLoad = function(e) {
       var ref;
+      this.log("onPageLoad");
       this.inner_loaded = true;
       if (!this.inner_ready) {
         this.sendInner({
@@ -1678,7 +1697,7 @@ $.extend( $.easing,
       }
       if (this.ws.ws.readyState === 1 && !this.site_info) {
         return this.reloadSiteInfo();
-      } else if (this.site_info && (((ref = this.site_info.content) != null ? ref.title : void 0) != null)) {
+      } else if (this.site_info && (((ref = this.site_info.content) != null ? ref.title : void 0) != null) && !this.is_title_changed) {
         window.document.title = this.site_info.content.title + " - ZeroNet";
         return this.log("Setting title to", window.document.title);
       }
@@ -1711,20 +1730,16 @@ $.extend( $.easing,
           var ref;
           _this.address = site_info.address;
           _this.setSiteInfo(site_info);
-          if (site_info.settings.size > site_info.size_limit * 1024 * 1024) {
-            if (_this.loading.screen_visible) {
-              _this.loading.showTooLarge(site_info);
-            } else {
-              _this.displayConfirm("Site is larger than allowed: " + ((site_info.settings.size / 1024 / 1024).toFixed(1)) + "MB/" + site_info.size_limit + "MB", "Set limit to " + site_info.next_size_limit + "MB", function() {
-                return _this.ws.cmd("siteSetLimit", [site_info.next_size_limit], function(res) {
-                  if (res === "ok") {
-                    return _this.notifications.add("size_limit", "done", "Site storage limit modified!", 5000);
-                  }
-                });
+          if (site_info.settings.size > site_info.size_limit * 1024 * 1024 && !_this.loading.screen_visible) {
+            _this.displayConfirm("Site is larger than allowed: " + ((site_info.settings.size / 1024 / 1024).toFixed(1)) + "MB/" + site_info.size_limit + "MB", "Set limit to " + site_info.next_size_limit + "MB", function() {
+              return _this.ws.cmd("siteSetLimit", [site_info.next_size_limit], function(res) {
+                if (res === "ok") {
+                  return _this.notifications.add("size_limit", "done", "Site storage limit modified!", 5000);
+                }
               });
-            }
+            });
           }
-          if (((ref = site_info.content) != null ? ref.title : void 0) != null) {
+          if ((((ref = site_info.content) != null ? ref.title : void 0) != null) && !_this.is_title_changed) {
             window.document.title = site_info.content.title + " - ZeroNet";
             return _this.log("Setting title to", window.document.title);
           }
@@ -1744,9 +1759,9 @@ $.extend( $.easing,
             if (!this.site_info) {
               this.reloadSiteInfo();
             }
-            if (site_info.content) {
+            if (site_info.content && !this.is_title_changed) {
               window.document.title = site_info.content.title + " - ZeroNet";
-              this.log("Required file done, setting title to", window.document.title);
+              this.log("Required file " + window.file_inner_path + " done, setting title to", window.document.title);
             }
             if (!window.show_loadingscreen) {
               this.notifications.add("modified", "info", "New version of this page has just released.<br>Reload to see the modified content.");
@@ -1786,10 +1801,15 @@ $.extend( $.easing,
         }
       }
       if (this.loading.screen_visible && this.inner_loaded && site_info.settings.size < site_info.size_limit * 1024 * 1024 && site_info.settings.size > 0) {
+        this.log("Loading screen visible, but inner loaded");
         this.loading.hideScreen();
       }
       if ((site_info != null ? (ref = site_info.settings) != null ? ref.own : void 0 : void 0) && (site_info != null ? (ref1 = site_info.settings) != null ? ref1.modified : void 0 : void 0) !== ((ref2 = this.site_info) != null ? (ref3 = ref2.settings) != null ? ref3.modified : void 0 : void 0)) {
         this.updateModifiedPanel();
+      }
+      if (this.loading.screen_visible && site_info.settings.size > site_info.size_limit * 1024 * 1024) {
+        this.log("Site too large");
+        this.loading.showTooLarge(site_info);
       }
       this.site_info = site_info;
       return this.event_site_info.resolve();
@@ -1851,8 +1871,8 @@ $.extend( $.easing,
     Wrapper.prototype.updateModifiedPanel = function() {
       return this.ws.cmd("siteListModifiedFiles", [], (function(_this) {
         return function(res) {
-          var closed, num;
-          num = res.modified_files.length;
+          var closed, num, ref;
+          num = (ref = res.modified_files) != null ? ref.length : void 0;
           if (num > 0) {
             closed = _this.site_info.settings.modified_files_notification === false;
             _this.infopanel.show(closed);
@@ -1872,7 +1892,7 @@ $.extend( $.easing,
               return false;
             });
           }
-          return _this.log("siteListModifiedFiles", res);
+          return _this.log("siteListModifiedFiles", num, res);
         };
       })(this));
     };
@@ -1897,7 +1917,7 @@ $.extend( $.easing,
       } else {
         this.announcer_line = this.loading.printLine(status_line);
       }
-      if (status_db.error.length > (status_db.announced.length + status_db.announcing.length)) {
+      if (status_db.error.length > (status_db.announced.length + status_db.announcing.length) && status_db.announced.length < 3) {
         return this.loading.showTrackerTorBridge(this.server_info);
       }
     };
@@ -1932,6 +1952,8 @@ $.extend( $.easing,
       if (reload == null) {
         reload = true;
       }
+      this.log("setSizeLimit: " + size_limit + ", reload: " + reload);
+      this.inner_loaded = false;
       this.ws.cmd("siteSetLimit", [size_limit], (function(_this) {
         return function(res) {
           if (res !== "ok") {
@@ -2040,7 +2062,6 @@ $.extend( $.easing,
   window.zeroframe = new WrapperZeroFrame(window.wrapper);
 
 }).call(this);
-
 
 /* ---- ZeroSiteTheme.coffee ---- */
 

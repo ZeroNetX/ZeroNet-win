@@ -28,7 +28,7 @@ def main():
         traceback.print_exc(file=open(error_log_path, "w"))
         print("---")
         print("Please report it: https://github.com/HelloZeroNet/ZeroNet/issues/new?assignees=&labels=&template=bug-report.md")
-        if sys.platform.startswith("win"):
+        if sys.platform.startswith("win") and "python.exe" not in sys.executable:
             displayErrorMessage(err, error_log_path)
 
     if main and (main.update_after_shutdown or main.restart_after_shutdown):  # Updater
@@ -38,8 +38,9 @@ def main():
             import update
             print("Updating...")
             update.update()
-            print("Restarting...")
-            restart()
+            if main.restart_after_shutdown:
+                print("Restarting...")
+                restart()
         else:
             print("Shutting down...")
             prepareShutdown()
@@ -84,7 +85,7 @@ def prepareShutdown():
             logger.removeHandler(handler)
 
     import time
-    time.sleep(1)  # Wait files to close
+    time.sleep(1)  # Wait for files to close
 
 def restart():
     args = sys.argv[:]

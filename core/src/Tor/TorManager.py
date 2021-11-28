@@ -12,14 +12,11 @@ import atexit
 import gevent
 
 from Config import config
+from Crypt import CryptEd25519
 from Crypt import CryptRsa
 from Site import SiteManager
 import socks
-try:
-    from gevent.coros import RLock
-except:
-    from gevent.lock import RLock
-from util import helper
+from gevent.lock import RLock
 from Debug import Debug
 from Plugin import PluginManager
 
@@ -38,6 +35,7 @@ class TorManager(object):
         self.lock = RLock()
         self.starting = True
         self.connecting = True
+        self.status = None
         self.event_started = gevent.event.AsyncResult()
 
         if config.tor == "disable":
@@ -64,7 +62,7 @@ class TorManager(object):
         self.starting = True
         try:
             if not self.connect():
-                raise Exception("No connection")
+                raise Exception(self.status)
             self.log.debug("Tor proxy port %s check ok" % config.tor_proxy)
         except Exception as err:
             if sys.platform.startswith("win") and os.path.isfile(self.tor_exe):
@@ -155,6 +153,9 @@ class TorManager(object):
                     res_auth = self.send('AUTHENTICATE "%s"' % config.tor_password, conn)
                 elif cookie_match:
                     cookie_file = cookie_match.group(1).encode("ascii").decode("unicode_escape")
+                    if not os.path.isfile(cookie_file) and self.tor_process:
+                        # Workaround for tor client cookie auth file utf8 encoding bug (https://github.com/torproject/stem/issues/57)
+                        cookie_file = os.path.dirname(self.tor_exe) + "\\data\\control_auth_cookie"
                     auth_hex = binascii.b2a_hex(open(cookie_file, "rb").read())
                     res_auth = self.send("AUTHENTICATE %s" % auth_hex.decode("utf8"), conn)
                 else:
@@ -214,8 +215,8 @@ class TorManager(object):
             return False
 
     def makeOnionAndKey(self):
-        res = self.request("ADD_ONION NEW:RSA1024 port=%s" % self.fileserver_port)
-        match = re.search("ServiceID=([A-Za-z0-9]+).*PrivateKey=RSA1024:(.*?)[\r\n]", res, re.DOTALL)
+        res = self.request("ADD_ONION NEW:ED25519-V3 port=%s" % self.fileserver_port)
+        match = re.search("ServiceID=([A-Za-z0-9]+).*PrivateKey=ED25519-V3:(.*?)[\r\n]", res, re.DOTALL)
         if match:
             onion_address, onion_privatekey = match.groups()
             return (onion_address, onion_privatekey)

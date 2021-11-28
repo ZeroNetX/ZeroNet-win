@@ -11,6 +11,7 @@ import urllib.parse
 
 import gevent
 
+import util
 from Config import config
 from Plugin import PluginManager
 from Debug import Debug
@@ -116,7 +117,7 @@ class UiWebsocketPlugin(object):
         peer_ips = [peer.key for peer in site.getConnectablePeers(20, allow_private=False)]
         peer_ips.sort(key=lambda peer_ip: ".onion:" in peer_ip)
         copy_link = "http://127.0.0.1:43110/%s/?zeronet_peers=%s" % (
-            site.content_manager.contents["content.json"].get("domain", site.address),
+            site.content_manager.contents.get("content.json", {}).get("domain", site.address),
             ",".join(peer_ips)
         )
 
@@ -172,8 +173,10 @@ class UiWebsocketPlugin(object):
             <li>
              <label>
               {_[Files]}
-              <small class="label-right"><a href='#Site+directory' id='link-directory' class='link-right'>{_[Open site directory]}</a>
-              <a href='/ZeroNet-Internal/Zip?address={site.address}' id='link-zip' class='link-right' download='site.zip'>{_[Save as .zip]}</a></small>
+              <a href='/list/{site.address}' class='link-right link-outline' id="browse-files">{_[Browse files]}</a>
+              <small class="label-right">
+               <a href='/ZeroNet-Internal/Zip?address={site.address}' id='link-zip' class='link-right' download='site.zip'>{_[Save as .zip]}</a>
+              </small>
              </label>
              <ul class='graph graph-stacked'>
         """))
@@ -314,7 +317,7 @@ class UiWebsocketPlugin(object):
 
         body.append(_("""
             <li>
-             <label>{_[Download and help distribute all files]}</label>
+             <label>{_[Help distribute added optional files]}</label>
              <input type="checkbox" class="checkbox" id="checkbox-autodownloadoptional" {checked}/><div class="checkbox-skin"></div>
         """))
 
@@ -325,6 +328,7 @@ class UiWebsocketPlugin(object):
                  <label>{_[Auto download big file size limit]}</label>
                  <input type='text' class='text text-num' value="{autodownload_bigfile_size_limit}" id='input-autodownload_bigfile_size_limit'/><span class='text-post'>MB</span>
                  <a href='#Set' class='button' id='button-autodownload_bigfile_size_limit'>{_[Set]}</a>
+                 <a href='#Download+previous' class='button' id='button-autodownload_previous'>{_[Download previous files]}</a>
                 </div>
             """))
         body.append("</li>")
@@ -482,7 +486,7 @@ class UiWebsocketPlugin(object):
     def sidebarRenderContents(self, body, site):
         has_privatekey = bool(self.user.getSiteData(site.address, create=False).get("privatekey"))
         if has_privatekey:
-            tag_privatekey = _("{_[Private key saved.]} <a href='#Forgot+private+key' id='privatekey-forgot' class='link-right'>{_[Forgot]}</a>")
+            tag_privatekey = _("{_[Private key saved.]} <a href='#Forget+private+key' id='privatekey-forget' class='link-right'>{_[Forget]}</a>")
         else:
             tag_privatekey = _("<a href='#Add+private+key' id='privatekey-add' class='link-right'>{_[Add saved private key]}</a>")
 
@@ -560,7 +564,7 @@ class UiWebsocketPlugin(object):
         self.log.info("Downloading GeoLite2 City database...")
         self.cmd("progress", ["geolite-info", _["Downloading GeoLite2 City database (one time only, ~20MB)..."], 0])
         db_urls = [
-            "https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.mmdb.gz",
+            "https://raw.githubusercontent.com/aemr3/GeoLite2-Database/master/GeoLite2-City.mmdb.gz",
             "https://raw.githubusercontent.com/texnikru/GeoLite2-Database/master/GeoLite2-City.mmdb.gz"
         ]
         for db_url in db_urls:
@@ -629,6 +633,7 @@ class UiWebsocketPlugin(object):
             loc_cache[ip] = loc
             return loc
 
+    @util.Noparallel()
     def getGeoipDb(self):
         db_name = 'GeoLite2-City.mmdb'
 
@@ -658,7 +663,6 @@ class UiWebsocketPlugin(object):
             self.log.debug("Not showing peer locations: no GeoIP database")
             return False
 
-        self.log.info("Loading GeoIP database from: %s" % db_path)
         geodb = maxminddb.open_database(db_path)
 
         peers = list(peers.values())
@@ -735,10 +739,35 @@ class UiWebsocketPlugin(object):
     @flag.no_multiuser
     def actionSiteSetOwned(self, to, owned):
         if self.site.address == config.updatesite:
-            return self.response(to, "You can't change the ownership of the updater site")
+            return {"error": "You can't change the ownership of the updater site"}
 
         self.site.settings["own"] = bool(owned)
         self.site.updateWebsocket(owned=owned)
+        return "ok"
+
+    @flag.admin
+    @flag.no_multiuser
+    def actionSiteRecoverPrivatekey(self, to):
+        from Crypt import CryptBitcoin
+
+        site_data = self.user.sites[self.site.address]
+        if site_data.get("privatekey"):
+            return {"error": "This site already has saved privated key"}
+
+        address_index = self.site.content_manager.contents.get("content.json", {}).get("address_index")
+        if not address_index:
+            return {"error": "No address_index in content.json"}
+
+        privatekey = CryptBitcoin.hdPrivatekey(self.user.master_seed, address_index)
+        privatekey_address = CryptBitcoin.privatekeyToAddress(privatekey)
+
+        if privatekey_address == self.site.address:
+            site_data["privatekey"] = privatekey
+            self.user.save()
+            self.site.updateWebsocket(recover_privatekey=True)
+            return "ok"
+        else:
+            return {"error": "Unable to deliver private key for this site from current user's master_seed"}
 
     @flag.admin
     @flag.no_multiuser
@@ -746,6 +775,7 @@ class UiWebsocketPlugin(object):
         site_data = self.user.sites[self.site.address]
         site_data["privatekey"] = privatekey
         self.site.updateWebsocket(set_privatekey=bool(privatekey))
+        self.user.save()
 
         return "ok"
 
@@ -753,8 +783,6 @@ class UiWebsocketPlugin(object):
     @flag.no_multiuser
     def actionSiteSetAutodownloadoptional(self, to, owned):
         self.site.settings["autodownloadoptional"] = bool(owned)
-        self.site.bad_files = {}
-        gevent.spawn(self.site.update, check_files=True)
         self.site.worker_manager.removeSolvedFileTasks()
 
     @flag.no_multiuser

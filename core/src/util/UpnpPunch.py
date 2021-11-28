@@ -128,36 +128,51 @@ def _parse_igd_profile(profile_xml):
 
 # add description
 def _get_local_ips():
+    def method1():
+        try:
+            # get local ip using UDP and a  broadcast address
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            # Not using <broadcast> because gevents getaddrinfo doesn't like that
+            # using port 1 as per hobbldygoop's comment about port 0 not working on osx:
+            # https://github.com/sirMackk/ZeroNet/commit/fdcd15cf8df0008a2070647d4d28ffedb503fba2#commitcomment-9863928
+            s.connect(('239.255.255.250', 1))
+            return [s.getsockname()[0]]
+        except:
+            pass
+
+    def method2():
+        # Get ip by using UDP and a normal address (google dns ip)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 0))
+            return [s.getsockname()[0]]
+        except:
+            pass
+
+    def method3():
+        # Get ip by '' hostname . Not supported on all platforms.
+        try:
+            return socket.gethostbyname_ex('')[2]
+        except:
+            pass
+
+    threads = [
+        gevent.spawn(method1),
+        gevent.spawn(method2),
+        gevent.spawn(method3)
+    ]
+
+    gevent.joinall(threads, timeout=5)
+
     local_ips = []
-
-    try:
-        # get local ip using UDP and a  broadcast address
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        # Not using <broadcast> because gevents getaddrinfo doesn't like that
-        # using port 1 as per hobbldygoop's comment about port 0 not working on osx:
-        # https://github.com/sirMackk/ZeroNet/commit/fdcd15cf8df0008a2070647d4d28ffedb503fba2#commitcomment-9863928
-        s.connect(('239.255.255.250', 1))
-        local_ips.append(s.getsockname()[0])
-    except:
-        pass
-
-    # Get ip by using UDP and a normal address (google dns ip)
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 0))
-        local_ips.append(s.getsockname()[0])
-    except:
-        pass
-
-    # Get ip by '' hostname . Not supported on all platforms.
-    try:
-        local_ips += socket.gethostbyname_ex('')[2]
-    except:
-        pass
+    for thread in threads:
+        if thread.value:
+            local_ips += thread.value
 
     # Delete duplicates
     local_ips = list(set(local_ips))
+
 
     # Probably we looking for an ip starting with 192
     local_ips = sorted(local_ips, key=lambda a: a.startswith("192"), reverse=True)
@@ -324,7 +339,7 @@ def _communicate_with_igd(port=15441,
             success = True
             break
 
-    # Wait another 10sec for competition or any positibe result
+    # Wait another 10sec for competition or any positive result
     for _ in range(10):
         all_done = all([thread.value is not None for thread in threads])
         any_succeed = any([thread.value for thread in threads])

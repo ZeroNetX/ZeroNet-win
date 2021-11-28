@@ -3,15 +3,22 @@ class Infopanel
 		@visible = false
 
 	show: (closed=false) =>
-		@elem.addClass("visible")
+		@elem.parent().addClass("visible")
 		if closed
 			@close()
 		else
 			@open()
 
+	unfold: =>
+		@elem.toggleClass("unfolded")
+		return false
+
 	updateEvents: =>
 		@elem.off("click")
 		@elem.find(".close").off("click")
+		@elem.find(".line").off("click")
+
+		@elem.find(".line").on("click", @unfold)
 
 		if @elem.hasClass("closed")
 			@elem.on "click", =>
@@ -23,7 +30,7 @@ class Infopanel
 				@close()
 
 	hide: =>
-		@elem.removeClass("visible")
+		@elem.parent().removeClass("visible")
 
 	close: =>
 		@elem.addClass("closed")

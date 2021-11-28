@@ -1336,6 +1336,14 @@
       }
       if (type === "boolean" && !value) {
         return false;
+      } else if (type === "number") {
+        if (typeof value === "number") {
+          return value.toString();
+        } else if (!value) {
+          return "0";
+        } else {
+          return value;
+        }
       } else {
         return value;
       }
@@ -1379,7 +1387,7 @@
         title: "File server port",
         type: "text",
         valid_pattern: /[0-9]*/,
-        description: "Other peers will use this port to reach your served sites. (default: 15441)"
+        description: "Other peers will use this port to reach your served sites. (default: randomize)"
       });
       section.items.push({
         key: "ip_external",
@@ -1426,7 +1434,7 @@
         key: "trackers_file",
         type: "textarea",
         description: "Load additional list of torrent trackers dynamically, from a file",
-        placeholder: "Eg.: data/trackers.json",
+        placeholder: "Eg.: {data_dir}/trackers.json",
         value_pos: "fullwidth"
       });
       section.items.push({
@@ -1464,7 +1472,7 @@
         })(this)
       });
       section = this.createSection("Performance");
-      return section.items.push({
+      section.items.push({
         key: "log_level",
         title: "Level of logging to file",
         type: "select",
@@ -1478,6 +1486,122 @@
           }, {
             title: "Only errors",
             value: "ERROR"
+          }
+        ]
+      });
+      section.items.push({
+        key: "threads_fs_read",
+        title: "Threads for async file system reads",
+        type: "select",
+        options: [
+          {
+            title: "Sync read",
+            value: 0
+          }, {
+            title: "1 thread",
+            value: 1
+          }, {
+            title: "2 threads",
+            value: 2
+          }, {
+            title: "3 threads",
+            value: 3
+          }, {
+            title: "4 threads",
+            value: 4
+          }, {
+            title: "5 threads",
+            value: 5
+          }, {
+            title: "10 threads",
+            value: 10
+          }
+        ]
+      });
+      section.items.push({
+        key: "threads_fs_write",
+        title: "Threads for async file system writes",
+        type: "select",
+        options: [
+          {
+            title: "Sync write",
+            value: 0
+          }, {
+            title: "1 thread",
+            value: 1
+          }, {
+            title: "2 threads",
+            value: 2
+          }, {
+            title: "3 threads",
+            value: 3
+          }, {
+            title: "4 threads",
+            value: 4
+          }, {
+            title: "5 threads",
+            value: 5
+          }, {
+            title: "10 threads",
+            value: 10
+          }
+        ]
+      });
+      section.items.push({
+        key: "threads_crypt",
+        title: "Threads for cryptographic functions",
+        type: "select",
+        options: [
+          {
+            title: "Sync execution",
+            value: 0
+          }, {
+            title: "1 thread",
+            value: 1
+          }, {
+            title: "2 threads",
+            value: 2
+          }, {
+            title: "3 threads",
+            value: 3
+          }, {
+            title: "4 threads",
+            value: 4
+          }, {
+            title: "5 threads",
+            value: 5
+          }, {
+            title: "10 threads",
+            value: 10
+          }
+        ]
+      });
+      return section.items.push({
+        key: "threads_db",
+        title: "Threads for database operations",
+        type: "select",
+        options: [
+          {
+            title: "Sync execution",
+            value: 0
+          }, {
+            title: "1 thread",
+            value: 1
+          }, {
+            title: "2 threads",
+            value: 2
+          }, {
+            title: "3 threads",
+            value: 3
+          }, {
+            title: "4 threads",
+            value: 4
+          }, {
+            title: "5 threads",
+            value: 5
+          }, {
+            title: "10 threads",
+            value: 10
           }
         ]
       });
@@ -1689,7 +1813,7 @@
       }, item.options.map((function(_this) {
         return function(option) {
           return h("option", {
-            selected: option.value === _this.values[item.key],
+            selected: option.value.toString() === _this.values[item.key],
             value: option.value
           }, option.title);
         };
@@ -1818,17 +1942,15 @@
     };
 
     UiConfig.prototype.saveValues = function(cb) {
-      var base, changed_values, i, item, j, last, len, match, message, results, value, value_same_as_default;
+      var base, changed_values, default_value, i, item, j, last, len, match, message, results, value, value_same_as_default;
       changed_values = this.getValuesChanged();
       results = [];
       for (i = j = 0, len = changed_values.length; j < len; i = ++j) {
         item = changed_values[i];
         last = i === changed_values.length - 1;
         value = this.config_storage.deformatValue(item.value, typeof this.config[item.key]["default"]);
-        value_same_as_default = JSON.stringify(this.config[item.key]["default"]) === JSON.stringify(value);
-        if (value_same_as_default) {
-          value = null;
-        }
+        default_value = this.config_storage.deformatValue(this.config[item.key]["default"], typeof this.config[item.key]["default"]);
+        value_same_as_default = JSON.stringify(default_value) === JSON.stringify(value);
         if (this.config[item.key].item.valid_pattern && !(typeof (base = this.config[item.key].item).isHidden === "function" ? base.isHidden() : void 0)) {
           match = value.match(this.config[item.key].item.valid_pattern);
           if (!match || match[0] !== value) {
@@ -1837,6 +1959,9 @@
             cb(false);
             break;
           }
+        }
+        if (value_same_as_default) {
+          value = null;
         }
         results.push(this.saveValue(item.key, value, last ? cb : null));
       }
